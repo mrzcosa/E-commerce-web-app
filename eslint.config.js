@@ -1,4 +1,4 @@
-import js from '@eslint/js'
+﻿import js from '@eslint/js'
 import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
@@ -17,9 +17,5 @@ export default defineConfig([
       globals: globals.browser,
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
-  },
-  {
-    files: ['server/**/*.js', 'scripts/**/*.{js,mjs}', 'vite.config.js'],
-    languageOptions: { globals: globals.node },
   },
 ])

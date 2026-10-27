@@ -1,34 +1,28 @@
 import { useEffect, useRef, useState } from 'react'
 import { money, imageFallback } from '../utils/marketplace'
-import { apiRequest, newIdempotencyKey } from '../utils/api'
+import { readStorage, writeStorage } from '../utils/marketplace'
 
 const steps = ['Delivery address', 'Payment method', 'Review order']
 
-export default function CheckoutModal({ items, total, onClose, onConfirm, directCheckout = false }) {
+export default function CheckoutModal({ items, total, onClose, onConfirm, onViewPurchases, directCheckout = false }) {
   const [step, setStep] = useState(0)
   const [paymentMethod, setPaymentMethod] = useState('')
-  const [address, setAddress] = useState({ fullName: '', phone: '', region: '', postalCode: '', street: '', label: 'Home' })
-  const [savedAddresses, setSavedAddresses] = useState([])
-  const [selectedAddressId, setSelectedAddressId] = useState('')
+  const [savedAddresses, setSavedAddresses] = useState(() => readStorage('add2cart-addresses-v1', []))
+  const [address, setAddress] = useState(() => {
+    const saved = readStorage('add2cart-addresses-v1', []).find((item) => item.isDefault)
+    return saved ? { fullName: saved.fullName, phone: saved.phone, region: saved.region, postalCode: saved.postalCode, street: saved.street, label: saved.label } : { fullName: '', phone: '', region: '', postalCode: '', street: '', label: 'Home' }
+  })
+  const [selectedAddressId, setSelectedAddressId] = useState(() => readStorage('add2cart-addresses-v1', []).find((item) => item.isDefault)?.id || '')
   const [complete, setComplete] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const [savingAddress, setSavingAddress] = useState(false)
   const [checkoutError, setCheckoutError] = useState('')
   const closeButtonRef = useRef(null)
-  const orderRequestKey = useRef(newIdempotencyKey())
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     closeButtonRef.current?.focus()
-    apiRequest('/api/addresses').then(({ addresses }) => {
-      setSavedAddresses(addresses)
-      const defaultAddress = addresses.find((item) => item.isDefault)
-      if (defaultAddress) {
-        setSelectedAddressId(defaultAddress.id)
-        setAddress({ fullName: defaultAddress.fullName, phone: defaultAddress.phone, region: defaultAddress.region, postalCode: defaultAddress.postalCode, street: defaultAddress.street, label: defaultAddress.label })
-      }
-    }).catch(() => {})
     const handleKeyDown = (event) => { if (event.key === 'Escape') onClose() }
     window.addEventListener('keydown', handleKeyDown)
     return () => {
@@ -51,29 +45,14 @@ export default function CheckoutModal({ items, total, onClose, onConfirm, direct
     setSavingAddress(true)
     setCheckoutError('')
     try {
-      const payload = { ...address, isDefault: true }
-      let result
-      if (selectedAddressId) {
-        result = await apiRequest(`/api/addresses/${encodeURIComponent(selectedAddressId)}`, { method: 'PATCH', body: payload })
-      } else {
-        const normalized = (value) => String(value || '').trim().toLowerCase()
-        const duplicate = savedAddresses.find((saved) => ['fullName', 'phone', 'region', 'postalCode', 'street', 'label'].every((field) => normalized(saved[field]) === normalized(address[field])))
-        if (duplicate) {
-          result = await apiRequest(`/api/addresses/${encodeURIComponent(duplicate.id)}/default`, { method: 'PATCH', body: {} })
-          setSelectedAddressId(duplicate.id)
-        } else {
-          result = await apiRequest('/api/addresses', { method: 'POST', body: payload })
-        }
-      }
-      setSavedAddresses(result.addresses || [])
-      const current = (result.addresses || []).find((saved) => saved.isDefault) || (result.addresses || []).find((saved) => saved.id === selectedAddressId)
-      if (current) {
-        setSelectedAddressId(current.id)
-        setAddress({ fullName: current.fullName, phone: current.phone, region: current.region, postalCode: current.postalCode, street: current.street, label: current.label })
-      }
+      const entry = { ...address, id: selectedAddressId || `address-${Date.now()}`, isDefault: true }
+      const addresses = [entry, ...savedAddresses.filter((saved) => saved.id !== entry.id).map((saved) => ({ ...saved, isDefault: false }))]
+      writeStorage('add2cart-addresses-v1', addresses)
+      setSavedAddresses(addresses)
+      setSelectedAddressId(entry.id)
       setStep(1)
-    } catch (error) {
-      setCheckoutError(error.message || 'We could not save this delivery address. Please try again.')
+    } catch {
+      setCheckoutError('We could not save this delivery address in this browser.')
     } finally {
       setSavingAddress(false)
     }
@@ -85,7 +64,7 @@ export default function CheckoutModal({ items, total, onClose, onConfirm, direct
     setConfirming(true)
     setCheckoutError('')
     try {
-      await onConfirm({ items, total, address, paymentMethod, direct: directCheckout, idempotencyKey: orderRequestKey.current })
+      await onConfirm({ items, total, address, paymentMethod, direct: directCheckout })
       setComplete(true)
     } catch (error) {
       setCheckoutError(error.message || 'We could not place your order. Please try again.')
@@ -116,13 +95,13 @@ export default function CheckoutModal({ items, total, onClose, onConfirm, direct
             <span className="checkout-success-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6" /></svg></span>
             <h3>Your order has been placed</h3>
             <p>View the order and its latest status under My Purchases.</p>
-            <button className="button primary" type="button" onClick={onClose}>Continue</button>
+            <button className="button primary" type="button" onClick={onViewPurchases || onClose}>View My Purchases</button>
           </div>
         ) : step === 0 ? (
           <form className="checkout-form" onSubmit={continueWithAddress}>
             <p className="checkout-intro">Add the delivery details for your selected items.</p>
             <div className="checkout-field-grid">
-              {savedAddresses.length > 0 && <label className="checkout-field full-width"><span>Saved delivery address</span><select value={selectedAddressId} onChange={chooseAddress}><option value="">Enter a new address</option>{savedAddresses.map((saved) => <option key={saved.id} value={saved.id}>{saved.label} — {saved.fullName}, {saved.region}</option>)}</select></label>}
+              {savedAddresses.length > 0 && <label className="checkout-field full-width"><span>Saved delivery address</span><select value={selectedAddressId} onChange={chooseAddress}><option value="">Enter a new address</option>{savedAddresses.map((saved) => <option key={saved.id} value={saved.id}>{saved.label} â€” {saved.fullName}, {saved.region}</option>)}</select></label>}
               <label className="checkout-field"><span>Full name</span><input autoComplete="name" name="fullName" value={address.fullName} onChange={updateAddress} placeholder="Full name" required /></label>
               <label className="checkout-field"><span>Phone number</span><input autoComplete="tel" name="phone" type="tel" value={address.phone} onChange={updateAddress} placeholder="09XX XXX XXXX" required /></label>
               <label className="checkout-field full-width"><span>Region, province, city, barangay</span><input autoComplete="address-level1" name="region" value={address.region} onChange={updateAddress} placeholder="Region, Province, City, Barangay" required /></label>
@@ -130,8 +109,8 @@ export default function CheckoutModal({ items, total, onClose, onConfirm, direct
               <label className="checkout-field"><span>Address label</span><select name="label" value={address.label} onChange={updateAddress}><option>Home</option><option>Work</option></select></label>
               <label className="checkout-field full-width"><span>Street, building, house number</span><textarea autoComplete="street-address" name="street" value={address.street} onChange={updateAddress} placeholder="Street name, building, house number" rows="2" required /></label>
             </div>
-            {checkoutError && <p className="auth-error" role="alert">{checkoutError}</p>}
-            <div className="checkout-modal-actions"><button className="text-button" type="button" onClick={onClose} disabled={savingAddress}>Cancel</button><button className="button primary" type="submit" disabled={savingAddress}>{savingAddress ? 'Saving…' : 'Continue'}</button></div>
+            {checkoutError && <p className="checkout-error" role="alert">{checkoutError}</p>}
+            <div className="checkout-modal-actions"><button className="text-button" type="button" onClick={onClose} disabled={savingAddress}>Cancel</button><button className="button primary" type="submit" disabled={savingAddress}>{savingAddress ? 'Savingâ€¦' : 'Continue'}</button></div>
           </form>
         ) : step === 1 ? (
           <div className="checkout-step-content">
@@ -146,11 +125,11 @@ export default function CheckoutModal({ items, total, onClose, onConfirm, direct
           <div className="checkout-step-content">
             <div className="checkout-review-card"><div className="checkout-review-heading"><h3>Deliver to</h3><button className="text-button" type="button" onClick={() => setStep(0)}>Edit</button></div><strong>{address.fullName} <span className="address-label">{address.label}</span></strong><p>{address.phone}</p><p>{address.street}, {address.region}, {address.postalCode}</p></div>
             <div className="checkout-review-card"><div className="checkout-review-heading"><h3>Payment</h3><button className="text-button" type="button" onClick={() => setStep(1)}>Edit</button></div><p>{paymentLabel}</p></div>
-            <div className="checkout-review-items"><h3>Selected items</h3>{items.map(({ product, quantity }) => <div className="checkout-review-item" key={product.id}><img src={product.image} alt="" onError={(event) => { event.currentTarget.src = imageFallback }} /><span>{product.name} <small>× {quantity}</small></span><strong>{money(product.price * quantity)}</strong></div>)}</div>
+            <div className="checkout-review-items"><h3>Selected items</h3>{items.map(({ product, quantity }) => <div className="checkout-review-item" key={product.id}><img src={product.image} alt="" onError={(event) => { event.currentTarget.src = imageFallback }} /><span>{product.name} <small>Ã— {quantity}</small></span><strong>{money(product.price * quantity)}</strong></div>)}</div>
             <div className="checkout-review-total"><span>Shipping</span><strong>Free</strong><span>Total</span><strong>{money(total)}</strong></div>
             <p className="demo-note checkout-demo-note">E-wallet payment is not processed in this app. E-wallet orders will remain under To Pay.</p>
-            {checkoutError && <p className="auth-error" role="alert">{checkoutError}</p>}
-            <div className="checkout-modal-actions"><button className="text-button" type="button" onClick={() => setStep(1)} disabled={confirming}>Back</button><button className="button primary" type="button" disabled={confirming} onClick={confirmOrder}>{confirming ? 'Placing order…' : 'Confirm checkout'}</button></div>
+            {checkoutError && <p className="checkout-error" role="alert">{checkoutError}</p>}
+            <div className="checkout-modal-actions"><button className="text-button" type="button" onClick={() => setStep(1)} disabled={confirming}>Back</button><button className="button primary" type="button" disabled={confirming} onClick={confirmOrder}>{confirming ? 'Placing orderâ€¦' : 'Confirm checkout'}</button></div>
           </div>
         )}
       </section>

@@ -1,46 +1,22 @@
-# Add2Cart
+﻿# Add2Cart
 
-Add2Cart is a React/Vite marketplace with a small Node.js API for accounts, carts, and orders. Node.js 22.13 or later is required because the API uses the built-in SQLite module.
+Add2Cart is a React/Vite marketplace demo. It keeps catalog edits, cart contents, saved items, delivery addresses, and purchase history in the shopper's browser using localStorage. No account or server API is required.
 
 ## Run locally
 
 ```sh
 npm install
-Copy-Item .env.example .env
 npm run dev
 ```
 
-The Vite UI runs at `http://127.0.0.1:5173` and proxies `/api` to the API at `http://127.0.0.1:4179`. `.env.example` lists the explicit local origins allowed to call the API. Set `APP_ORIGINS` to a comma-separated list of exact trusted frontend origins if the UI runs elsewhere. Set `ADMIN_EMAILS` to the email address(es) that should have seller-approval administration rights; registration still cannot assign roles. The API creates `server/data/add2cart.sqlite` on first run. Keep this database on persistent storage; it contains accounts, seller applications, products, saved addresses, carts, sessions (token hashes only), and orders.
+Vite runs the storefront locally. Use `npm run build` to create the production static site, `npm run preview` to preview that build, and `npm run lint` to check the source.
 
-For production, run `npm run build`, then `npm start`. The API serves the built `dist` files and the same API. Set `APP_ORIGINS` to the public site origin(s), set `ADMIN_EMAILS`, and use HTTPS behind a trusted reverse proxy. Set `DATA_DIR` or `DATABASE_PATH` to a persistent writable location when needed. `API_PORT` configures the local API and Vite proxy. This SQLite setup needs a persistent Node host; do not use an ephemeral serverless filesystem such as a default Vercel function filesystem. For serverless deployment, configure a managed PostgreSQL or other persistent database adapter first.
+## Guest shopping
 
-## Authentication and shopping API
+Shoppers can browse, search, filter categories, save items, add to cart, and use Buy Now without signing in. Cart quantities and inventory are kept in this browser. Checkout collects a delivery address and payment choice, then records a demo order locally. Cash on delivery and e-wallet are display options only; the app does not collect payments. Saved delivery addresses and order history are also stored in this browser and are not shared between devices.
 
-- `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `PATCH /api/auth/profile`, `POST /api/auth/password`
-- `GET /api/products`, `GET /api/products/:id`, `GET /api/products/search`, `GET /api/categories`
-- `POST /api/products`, `PATCH /api/products/:id`, `DELETE /api/products/:id` (approved seller-owned listings; archive on delete)
-- `GET /api/seller/profile`, `POST /api/seller/profile`, `PATCH /api/seller/profile`
-- `GET /api/seller/products`, `GET /api/seller/orders`, `PATCH /api/seller/orders/:id`, `GET /api/seller/analytics`
-- `GET /api/admin/sellers`, `PATCH /api/admin/sellers/:userId/approval` (configured administrator email only)
-- `GET /api/catalog` (inventory summary)
-- `GET /api/addresses`, `POST /api/addresses`, `PATCH /api/addresses/:id`, `DELETE /api/addresses/:id`, `PATCH /api/addresses/:id/default`
-- `GET /api/wishlist`, `POST /api/wishlist/items`, `DELETE /api/wishlist/items/:productId`
-- `GET /api/cart`, `POST /api/cart/items`, `PATCH /api/cart/items/:id`, `DELETE /api/cart/items/:id`, `DELETE /api/cart`, `POST /api/cart/migrate`
-- `GET /api/orders`, `GET /api/orders/:id`, `POST /api/orders`, `PATCH /api/orders/:id` (cancellation and received confirmation)
-- `GET /api/health`
+My products is a local listing manager. Listings are stored with the catalog in this browser and are not published to a shared marketplace.
 
-Guests can browse and search the database-backed catalog. Cart and order endpoints require the signed-in user's HttpOnly session cookie. Passwords are scrypt-hashed; product price, stock, order totals, and order ownership are checked by the API. Public registration always assigns the customer role. Seller applications remain pending until an allowlisted admin approves them. Product mutations verify seller ownership, and seller fulfillment routes return only that seller's order items. Product, cart, and order creation accept idempotency keys to safely retry requests. Exact-origin CORS and mutation-origin checks allow the configured frontend URLs only.
+## Existing database data
 
-Checkout supports cash on delivery and an e-wallet *pending payment* record. E-wallet orders cannot be shipped until a payment provider confirms payment. No payment gateway, email delivery/password recovery, profile-image storage, or shipping carrier integration is configured. Store images are validated HTTP/HTTPS references; uploads are not configured.
-
-SQLite tables are created and upgraded by idempotent startup migrations tracked in `schema_migrations`. Back up the database file and its SQLite WAL state using a SQLite-aware backup procedure. Seller approval can be managed with the admin API after signing in with an address listed in `ADMIN_EMAILS`.
-
-## Verification
-
-```sh
-npm run lint
-npm run build
-npm run test:auth
-```
-
-The auth smoke test starts an isolated API and temporary SQLite database, exercises guest rejection and account/cart/order flows, and removes its temporary data after completion.
+The former SQLite API source files were removed as part of the authentication removal. Existing files under `server/data` are intentionally left untouched; the storefront no longer reads or writes them. Back up that directory before manually removing any old database or uploaded files.

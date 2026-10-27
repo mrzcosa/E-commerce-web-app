@@ -15,7 +15,7 @@ export default function PurchaseHistory({ orders, onUpdateStatus, navigate }) {
   return (
     <main className="container page-main purchases-page">
       <div className="page-title-row purchases-title-row">
-        <div><p className="eyebrow">Your account</p><h1>My Purchases</h1><p className="page-subtitle">Keep track of your orders and their status.</p></div>
+        <div><p className="eyebrow">Order history</p><h1>My Purchases</h1><p className="page-subtitle">Keep track of your orders and their status on this device.</p></div>
       </div>
 
       <div className="purchase-tabs" role="tablist" aria-label="Filter purchases by status">
@@ -57,7 +57,7 @@ export default function PurchaseHistory({ orders, onUpdateStatus, navigate }) {
           </div>
         )}
       </section>
-      <p className="purchase-local-note">Orders are linked to your account in the application database. E-wallet payment and shipment tracking require provider integrations.</p>
+      <p className="purchase-local-note">Order history is saved in this browser. E-wallet payment and shipment tracking require provider integrations.</p>
     </main>
   )
 }
